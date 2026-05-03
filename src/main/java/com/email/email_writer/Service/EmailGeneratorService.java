@@ -21,8 +21,9 @@ public class EmailGeneratorService {
     @Value("${gemini.api.url}")
     private String geminiApiUrl;
 
-    @Value("${gemini.api.key}")
+    @Value("${GEMINI_API_KEY:}")
     private String geminiApiKey;
+
 
     public String generateEmailReply(EmailRequest emailRequest) {
 
