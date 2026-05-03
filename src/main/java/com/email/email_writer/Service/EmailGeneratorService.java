@@ -18,17 +18,15 @@ public class EmailGeneratorService {
         this.webClient = builder.build();
     }
 
+    // 🔑 OpenRouter API Key
     @Value("${GEMINI_API_KEY:}")
-    private String geminiApiKey;
-
-
-    @Value("${gemini.api.url}")
-    private String geminiApiUrl;
-
-
-
+    private String apiKey;
 
     public String generateEmailReply(EmailRequest emailRequest) {
+
+        if (apiKey == null || apiKey.isBlank()) {
+            return "API key missing (check Render environment)";
+        }
 
         String prompt = buildPrompt(emailRequest);
 
@@ -36,73 +34,57 @@ public class EmailGeneratorService {
             return "Prompt is empty";
         }
 
-        Map<String, Object> requestBody = Map.of(
-                "contents", java.util.List.of(
-                        Map.of(
-                                "parts", java.util.List.of(
-                                        Map.of("text", prompt)
-                                )
-                        )
-                ),
-                "generationConfig", Map.of(
-                        "maxOutputTokens", 500
-                )
-        );
-
         try {
 
             String response = webClient.post()
-                    .uri(geminiApiUrl)
+                    .uri("https://openrouter.ai/api/v1/chat/completions")
+                    .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
-                    .header("x-goog-api-key", geminiApiKey)
-                    .bodyValue(requestBody)
+                    .header("HTTP-Referer", "https://your-app.onrender.com")
+                    .header("X-Title", "Email Generator App")
+                    .bodyValue(Map.of(
+                            "model", "openrouter/auto",
+                            "messages", java.util.List.of(
+                                    Map.of("role", "user", "content", prompt)
+                            )
+                    ))
                     .retrieve()
-
-                    // ✅ Correct error handling
                     .onStatus(status -> status.isError(),
                             clientResponse -> clientResponse.bodyToMono(String.class)
                                     .flatMap(errorBody -> {
-                                        System.out.println("Gemini API ERROR: " + errorBody);
+                                        System.out.println("OpenRouter ERROR: " + errorBody);
                                         return reactor.core.publisher.Mono.error(
-                                                new RuntimeException("Gemini Error: " + errorBody)
+                                                new RuntimeException("OpenRouter Error: " + errorBody)
                                         );
                                     })
                     )
-
                     .bodyToMono(String.class)
                     .block();
 
-            System.out.println("Gemini raw response: " + response);
+            System.out.println("RAW RESPONSE: " + response);
 
             return extractResponseContent(response);
 
         } catch (Exception e) {
             e.printStackTrace();
-            return "Gemini API failed: " + e.getMessage();
+            return "API failed: " + e.getMessage();
         }
     }
 
     private String extractResponseContent(String response) {
         try {
             ObjectMapper mapper = new ObjectMapper();
-            JsonNode rootNode = mapper.readTree(response);
+            JsonNode root = mapper.readTree(response);
 
-            JsonNode candidates = rootNode.path("candidates");
-
-            if (candidates.isArray() && candidates.size() > 0) {
-                return candidates.get(0)
-                        .path("content")
-                        .path("parts")
-                        .get(0)
-                        .path("text")
-                        .asText();
-            }
-
-            return "No response from Gemini";
+            return root.path("choices")
+                    .get(0)
+                    .path("message")
+                    .path("content")
+                    .asText();
 
         } catch (Exception e) {
             e.printStackTrace();
-            return "Error Processing Response: " + e.getMessage();
+            return "Error parsing response: " + e.getMessage();
         }
     }
 
