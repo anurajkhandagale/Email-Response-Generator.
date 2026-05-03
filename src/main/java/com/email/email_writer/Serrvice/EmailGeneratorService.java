@@ -27,12 +27,12 @@ public class EmailGeneratorService {
         //Build the prompt
         String prompt = buildprompt(emailRequest);
 
-// ✅ ADD THIS BLOCK HERE
+
         if (prompt == null || prompt.isBlank()) {
             throw new RuntimeException("Prompt is empty");
         }
 
-// ✅ DEBUG
+
         System.out.println("PROMPT: " + prompt);
         //Craft a request
         Map<String, Object> requestBody = Map.of(
@@ -56,13 +56,15 @@ public class EmailGeneratorService {
                 .header("x-goog-api-key", geminiApiKey)
                 .bodyValue(requestBody)
                 .retrieve()
-                .onStatus(
-                        status -> status.isError(),
-                        responsee -> responsee.bodyToMono(String.class)
-                                .map(body -> new RuntimeException("Gemini Error: " + body))
+                .onStatus(status -> status.isError(),
+                        clientResponse -> clientResponse.bodyToMono(String.class)
+                                .map(errorBody -> new RuntimeException("Gemini Error: " + errorBody))
                 )
                 .bodyToMono(String.class)
                 .block();
+
+        System.out.println("Gemini raw response: " + response);
+
 
         System.out.println("RAW RESPONSE: " + response);System.out.println("RAW RESPONSE: " + response);
         //extract response and,
@@ -91,6 +93,7 @@ public class EmailGeneratorService {
             return "No response from Gemini";
 
         } catch (Exception e) {
+            e.printStackTrace();
             return "Error Processing Request: " + e.getMessage();
         }
     }
