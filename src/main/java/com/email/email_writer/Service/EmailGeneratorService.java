@@ -1,4 +1,4 @@
-package com.email.email_writer.Serrvice;
+package com.email.email_writer.Service;
 
 import com.email.email_writer.Configure.EmailRequest;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,29 +12,26 @@ import java.util.Map;
 @Service
 public class EmailGeneratorService {
 
+    private final WebClient webClient;
+
     public EmailGeneratorService(WebClient.Builder builder) {
         this.webClient = builder.build();
     }
-
-    private final WebClient webClient;
 
     @Value("${gemini.api.url}")
     private String geminiApiUrl;
 
     @Value("${gemini.api.key}")
     private String geminiApiKey;
-    public String generateEmailReply(EmailRequest emailRequest){
-        //Build the prompt
-        String prompt = buildprompt(emailRequest);
 
+    public String generateEmailReply(EmailRequest emailRequest) {
+
+        String prompt = buildPrompt(emailRequest);
 
         if (prompt == null || prompt.isBlank()) {
-            throw new RuntimeException("Prompt is empty");
+            return "Prompt is empty";
         }
 
-
-        System.out.println("PROMPT: " + prompt);
-        //Craft a request
         Map<String, Object> requestBody = Map.of(
                 "contents", java.util.List.of(
                         Map.of(
@@ -47,9 +44,7 @@ public class EmailGeneratorService {
                         "maxOutputTokens", 500
                 )
         );
-        System.out.println("REQUEST BODY: " + requestBody);
 
-        //Do req and response
         try {
 
             String response = webClient.post()
@@ -59,11 +54,14 @@ public class EmailGeneratorService {
                     .bodyValue(requestBody)
                     .retrieve()
 
+                    // ✅ Correct error handling
                     .onStatus(status -> status.isError(),
                             clientResponse -> clientResponse.bodyToMono(String.class)
-                                    .map(errorBody -> {
+                                    .flatMap(errorBody -> {
                                         System.out.println("Gemini API ERROR: " + errorBody);
-                                        return new RuntimeException("Gemini Error: " + errorBody);
+                                        return reactor.core.publisher.Mono.error(
+                                                new RuntimeException("Gemini Error: " + errorBody)
+                                        );
                                     })
                     )
 
@@ -78,6 +76,7 @@ public class EmailGeneratorService {
             e.printStackTrace();
             return "Gemini API failed: " + e.getMessage();
         }
+    }
 
     private String extractResponseContent(String response) {
         try {
@@ -99,19 +98,23 @@ public class EmailGeneratorService {
 
         } catch (Exception e) {
             e.printStackTrace();
-            return "Error Processing Request: " + e.getMessage();
+            return "Error Processing Response: " + e.getMessage();
         }
     }
 
-    private String buildprompt(EmailRequest emailRequest) {
-        StringBuilder prompt=new StringBuilder();
-        prompt.append("Generate a professional email reply for the following email content.  Please don't generate  a subject line ");
-        if (emailRequest.getTone()!=null &&!emailRequest.getTone().isEmpty()){
-            prompt.append("Use a ").append(emailRequest.getTone()).append("tone. ");
+    private String buildPrompt(EmailRequest emailRequest) {
+        StringBuilder prompt = new StringBuilder();
+
+        prompt.append("Generate a professional email reply for the following email content. ");
+        prompt.append("Do not include a subject line.\n\n");
+
+        if (emailRequest.getTone() != null && !emailRequest.getTone().isEmpty()) {
+            prompt.append("Use a ").append(emailRequest.getTone()).append(" tone.\n\n");
         }
-        prompt.append("\nOriginal EMail: \n").append(emailRequest.getEmailContent());
+
+        prompt.append("Original Email:\n");
+        prompt.append(emailRequest.getEmailContent());
+
         return prompt.toString();
     }
-
-
 }
