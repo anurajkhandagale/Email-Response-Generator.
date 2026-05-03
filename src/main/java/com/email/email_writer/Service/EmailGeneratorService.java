@@ -18,11 +18,14 @@ public class EmailGeneratorService {
         this.webClient = builder.build();
     }
 
+    @Value("${GEMINI_API_KEY:}")
+    private String geminiApiKey;
+
+
     @Value("${gemini.api.url}")
     private String geminiApiUrl;
 
-    @Value("${GEMINI_API_KEY:}")
-    private String geminiApiKey;
+
 
 
     public String generateEmailReply(EmailRequest emailRequest) {
