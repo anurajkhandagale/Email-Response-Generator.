@@ -50,29 +50,34 @@ public class EmailGeneratorService {
         System.out.println("REQUEST BODY: " + requestBody);
 
         //Do req and response
-        String response = webClient.post()
-                .uri(geminiApiUrl)
-                .header("Content-Type", "application/json")
-                .header("x-goog-api-key", geminiApiKey)
-                .bodyValue(requestBody)
-                .retrieve()
-                .onStatus(status -> status.isError(),
-                        clientResponse -> clientResponse.bodyToMono(String.class)
-                                .map(errorBody -> new RuntimeException("Gemini Error: " + errorBody))
-                )
-                .bodyToMono(String.class)
-                .block();
+        try {
 
-        System.out.println("Gemini raw response: " + response);
+            String response = webClient.post()
+                    .uri(geminiApiUrl)
+                    .header("Content-Type", "application/json")
+                    .header("x-goog-api-key", geminiApiKey)
+                    .bodyValue(requestBody)
+                    .retrieve()
 
+                    .onStatus(status -> status.isError(),
+                            clientResponse -> clientResponse.bodyToMono(String.class)
+                                    .map(errorBody -> {
+                                        System.out.println("Gemini API ERROR: " + errorBody);
+                                        return new RuntimeException("Gemini Error: " + errorBody);
+                                    })
+                    )
 
-        System.out.println("RAW RESPONSE: " + response);System.out.println("RAW RESPONSE: " + response);
-        //extract response and,
-        //response return:
+                    .bodyToMono(String.class)
+                    .block();
 
-        return extractResponseContent(response);
+            System.out.println("Gemini raw response: " + response);
 
-    }
+            return extractResponseContent(response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "Gemini API failed: " + e.getMessage();
+        }
 
     private String extractResponseContent(String response) {
         try {
